@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Eval Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark">◆</span>
+      <span class="brand-name">Eval Dashboard</span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Dashboard views">
+      <button class="tab is-active" role="tab" aria-selected="true" data-view="overview">Overview</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="compare">Compare Runs</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="testtable">Test Table</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="questions">Questions</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="trends">Trends</button>
+    </nav>
+  </header>
+
+  <main class="app-main">
+
+    <!-- ============================= OVERVIEW ============================= -->
+    <section class="view" id="view-overview" data-view-panel="overview">
+
+      <div class="view-toolbar">
+        <label class="field">
+          <span class="field-label">Run</span>
+          <select id="overview-run-select" class="control"></select>
+        </label>
+
+        <div class="run-controls">
+          <div class="schedule-toggle">
+            <label class="switch-label">
+              <input type="checkbox" id="schedule-toggle" />
+              <span>Auto-run every 24h (this tab only)</span>
+            </label>
+            <span class="schedule-hint" id="schedule-hint"></span>
+          </div>
+          <button class="btn-primary" id="run-now-btn">Run Now</button>
+        </div>
+      </div>
+
+      <p class="run-error" id="run-error" hidden></p>
+
+      <div class="stat-grid" id="stat-grid" aria-live="polite">
+        <!-- stat tiles injected by script.js -->
+      </div>
+
+      <div class="filter-row">
+        <label class="field">
+          <span class="field-label">Category</span>
+          <select id="filter-category" class="control">
+            <option value="">All categories</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Status</span>
+          <select id="filter-status" class="control">
+            <option value="">All statuses</option>
+            <option value="pass">Pass</option>
+            <option value="fail">Fail</option>
+            <option value="flaky">Flaky</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Adapter</span>
+          <select id="filter-adapter" class="control">
+            <option value="">All adapters</option>
+          </select>
+        </label>
+        <label class="field field-search">
+          <span class="field-label">Search question</span>
+          <input type="search" id="filter-search" class="control" placeholder="Search gold question…" />
+        </label>
+      </div>
+
+      <div class="table-card">
+        <table class="data-table" id="results-table">
+          <thead>
+            <tr>
+              <th data-sort="test_id" scope="col"><button class="th-btn">Test ID<span class="sort-caret"></span></button></th>
+              <th data-sort="category" scope="col"><button class="th-btn">Category<span class="sort-caret"></span></button></th>
+              <th data-sort="adapter" scope="col"><button class="th-btn">Adapter<span class="sort-caret"></span></button></th>
+              <th data-sort="score" scope="col"><button class="th-btn">Score<span class="sort-caret"></span></button></th>
+              <th data-sort="accuracy" scope="col"><button class="th-btn">Accuracy<span class="sort-caret"></span></button></th>
+              <th data-sort="hallucination_rate" scope="col"><button class="th-btn">Hallucination Rate<span class="sort-caret"></span></button></th>
+              <th data-sort="completeness" scope="col"><button class="th-btn">Completeness<span class="sort-caret"></span></button></th>
+              <th data-sort="repeatability" scope="col"><button class="th-btn">Repeatability<span class="sort-caret"></span></button></th>
+              <th data-sort="status" scope="col"><button class="th-btn">Status<span class="sort-caret"></span></button></th>
+              <th data-sort="latency" scope="col"><button class="th-btn">Latency<span class="sort-caret"></span></button></th>
+            </tr>
+          </thead>
+          <tbody id="results-tbody">
+            <!-- rows injected by script.js -->
+          </tbody>
+        </table>
+        <p class="table-empty" id="results-empty" hidden>No test cases match the current filters.</p>
+      </div>
+
+    </section>
+
+    <!-- ============================ COMPARE RUNS ============================ -->
+    <section class="view" id="view-compare" data-view-panel="compare" hidden>
+
+      <div class="compare-layout">
+
+        <div class="run-picker-card">
+          <h2 class="card-title">Runs</h2>
+          <p class="card-hint">Select 2 or more runs to compare.</p>
+          <fieldset class="run-picker" id="run-picker">
+            <!-- checkboxes injected by script.js -->
+          </fieldset>
+        </div>
+
+        <div class="compare-results">
+          <div class="table-card">
+            <table class="data-table compare-table" id="compare-table">
+              <thead>
+                <tr id="compare-table-head">
+                  <!-- injected by script.js -->
+                </tr>
+              </thead>
+              <tbody id="compare-tbody">
+                <!-- injected by script.js -->
+              </tbody>
+            </table>
+          </div>
+          <p class="table-empty" id="compare-empty">Select at least 2 runs to see a comparison.</p>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ============================ TEST TABLE ============================ -->
+    <section class="view" id="view-testtable" data-view-panel="testtable" hidden>
+
+      <div class="view-toolbar">
+        <div class="run-multiselect" id="test-table-run-select">
+          <button class="control run-multiselect-btn" id="test-table-run-btn" type="button" aria-haspopup="true" aria-expanded="false">
+            <span id="test-table-run-btn-label">Select runs</span>
+            <span class="select-caret">▾</span>
+          </button>
+          <div class="run-multiselect-panel" id="test-table-run-panel" hidden>
+            <!-- checkboxes injected by script.js -->
+          </div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <table class="data-table test-table" id="test-table">
+          <thead>
+            <tr id="test-table-head">
+              <!-- injected by script.js -->
+            </tr>
+          </thead>
+          <tbody id="test-table-tbody">
+            <!-- injected by script.js -->
+          </tbody>
+        </table>
+        <p class="table-empty" id="test-table-empty" hidden>No runs yet — run the eval to populate this table.</p>
+      </div>
+
+    </section>
+
+    <!-- ============================ QUESTIONS ============================ -->
+    <section class="view" id="view-questions" data-view-panel="questions" hidden>
+
+      <div class="view-toolbar">
+        <p class="card-hint card-hint-flush">All questions in the suite. Add your own to run them alongside the built-in set.</p>
+        <button class="btn-primary" id="add-question-btn" type="button">Add Question</button>
+      </div>
+
+      <div class="question-form-card" id="question-form-card" hidden>
+        <h2 class="card-title" id="question-form-title">Add question</h2>
+        <div class="filter-row filter-row-tight">
+          <label class="field field-search">
+            <span class="field-label">Question</span>
+            <input type="text" id="question-form-question" class="control" placeholder="What should the model answer?" />
+          </label>
+          <label class="field">
+            <span class="field-label">Category</span>
+            <input type="text" id="question-form-category" class="control" placeholder="Custom" />
+          </label>
+          <label class="field">
+            <span class="field-label">Pass score (0–1)</span>
+            <input type="number" id="question-form-pass-score" class="control" min="0" max="1" step="0.05" placeholder="0.50" />
+          </label>
+        </div>
+        <div class="filter-row filter-row-tight">
+          <label class="field field-search">
+            <span class="field-label">Expected answer</span>
+            <textarea id="question-form-expected" class="control" rows="3" placeholder="What the model should say"></textarea>
+          </label>
+        </div>
+        <p class="run-error" id="question-form-error" hidden></p>
+        <div class="run-controls">
+          <button class="btn-primary" id="question-form-save-btn" type="button">Save</button>
+          <button class="link-btn" id="question-form-cancel-btn" type="button">Cancel</button>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <table class="data-table questions-table" id="questions-table">
+          <thead>
+            <tr>
+              <th scope="col">Question</th>
+              <th scope="col">Expected Answer</th>
+              <th scope="col">Category</th>
+              <th scope="col">Pass Score</th>
+              <th scope="col">Source</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="questions-tbody">
+            <!-- rows injected by script.js -->
+          </tbody>
+        </table>
+        <p class="table-empty" id="questions-empty" hidden>No questions yet.</p>
+      </div>
+
+    </section>
+
+    <!-- ============================ TRENDS ============================ -->
+    <section class="view" id="view-trends" data-view-panel="trends" hidden>
+
+      <div class="view-toolbar">
+        <p class="card-hint card-hint-flush">Mean score per metric across all historical runs, oldest to newest. Watch for a downward slope to spot regressions.</p>
+        <button class="btn-primary" id="trends-download-all-btn" type="button">Download All (PNG)</button>
+      </div>
+
+      <div class="trends-grid" id="trends-grid">
+        <!-- chart cards injected by script.js -->
+      </div>
+
+      <p class="table-empty" id="trends-empty" hidden>Not enough run history yet — run the eval at least once to see trends.</p>
+
+    </section>
+
+  </main>
+
+</div>
+
+<!-- ============================ DETAIL DRAWER ============================ -->
+<div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-labelledby="drawer-title">
+  <header class="drawer-header">
+    <div>
+      <span class="badge" id="drawer-category">Category</span>
+      <h2 class="drawer-title" id="drawer-title">Test case</h2>
+    </div>
+    <button class="drawer-close" id="drawer-close" aria-label="Close panel">✕</button>
+  </header>
+
+  <div class="drawer-body">
+
+    <section class="drawer-section">
+      <h3 class="drawer-section-title">Gold question</h3>
+      <p class="drawer-text" id="drawer-question"></p>
+    </section>
+
+    <div class="drawer-columns">
+      <section class="drawer-section">
+        <h3 class="drawer-section-title">Expected answer</h3>
+        <p class="drawer-text" id="drawer-expected"></p>
+      </section>
+      <section class="drawer-section">
+        <h3 class="drawer-section-title">Actual answer</h3>
+        <p class="drawer-text" id="drawer-actual"></p>
+      </section>
+    </div>
+
+    <section class="drawer-section drawer-meta-row">
+      <div class="meta-item">
+        <span class="meta-label">Adapter</span>
+        <span class="badge" id="drawer-adapter">—</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Score</span>
+        <span class="meta-value" id="drawer-score">—</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Status</span>
+        <span class="badge" id="drawer-status">—</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Latency</span>
+        <span class="meta-value" id="drawer-latency">—</span>
+      </div>
+    </section>
+
+    <section class="drawer-section" id="drawer-metrics-section" hidden>
+      <h3 class="drawer-section-title">Metrics breakdown</h3>
+      <table class="data-table metrics-table">
+        <thead>
+          <tr>
+            <th scope="col">Metric</th>
+            <th scope="col">Score</th>
+            <th scope="col">Result</th>
+            <th scope="col">Reason</th>
+          </tr>
+        </thead>
+        <tbody id="drawer-metrics-tbody"></tbody>
+      </table>
+    </section>
+
+    <section class="drawer-section">
+      <div class="drawer-section-headrow">
+        <h3 class="drawer-section-title">Score history</h3>
+        <button class="link-btn" id="drawer-toggle-table">View as table</button>
+      </div>
+      <figure class="sparkline-figure" id="drawer-sparkline-figure">
+        <!-- SVG sparkline injected by script.js -->
+      </figure>
+      <div class="history-table-wrap" id="drawer-history-table-wrap" hidden>
+        <table class="data-table history-table">
+          <thead>
+            <tr>
+              <th scope="col">Run</th>
+              <th scope="col">Score</th>
+              <th scope="col">Status</th>
+              <th scope="col">Latency</th>
+            </tr>
+          </thead>
+          <tbody id="drawer-history-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+</aside>
+
+<script src="data.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
