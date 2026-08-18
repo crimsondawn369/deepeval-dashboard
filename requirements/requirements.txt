@@ -1,0 +1,10 @@
+aiohttp==3.14.3
+deepeval==4.1.7
+azure-identity==1.25.3
+openai==3.0.0
+python-dotenv==1.2.2
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-repeat==0.9.4
+pytest-rerunfailures==16.4
+pytest-xdist==3.8.0
