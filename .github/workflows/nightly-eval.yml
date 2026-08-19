@@ -44,6 +44,10 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_MODEL_NAME: ${{ secrets.AZURE_MODEL_NAME }}
+          AZURE_DEPLOYMENT_NAME: ${{ secrets.AZURE_DEPLOYMENT_NAME }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          OPENAI_API_VERSION: ${{ secrets.OPENAI_API_VERSION }}
         run: python3 -c "import asyncio, server; asyncio.run(server.execute_real_run())"
 
       - name: Commit results.json back to main
