@@ -50,24 +50,32 @@ jobs:
           OPENAI_API_VERSION: ${{ secrets.OPENAI_API_VERSION }}
         run: python3 -c "import asyncio, server; asyncio.run(server.execute_real_run())"
 
-      - name: Commit results.json back to main
+      - name: Commit new run file back to main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add dashboard/results.json
-          git diff --cached --quiet && echo "No changes to commit" || git commit -m "Update results.json from scheduled eval run"
+          git add dashboard/results/
+          git diff --cached --quiet && echo "No changes to commit" || git commit -m "Add results from scheduled eval run"
           git push
 
       - name: Build static Pages site
+        working-directory: dashboard
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_MODEL_NAME: ${{ secrets.AZURE_MODEL_NAME }}
+          AZURE_DEPLOYMENT_NAME: ${{ secrets.AZURE_DEPLOYMENT_NAME }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          OPENAI_API_VERSION: ${{ secrets.OPENAI_API_VERSION }}
         run: |
-          mkdir -p _site
-          cp dashboard/index.html dashboard/script.js dashboard/styles.css _site/
+          mkdir -p ../_site
+          cp index.html script.js styles.css ../_site/
           python3 -c "
-          import json
-          with open('dashboard/results.json') as f:
-              results = f.read()
-          with open('_site/data.js', 'w') as f:
-              f.write(f'const MOCK_DATA = {results};\n')
+          import json, server
+          data = server.load_all_results()
+          with open('../_site/data.js', 'w') as f:
+              f.write(f'const MOCK_DATA = {json.dumps(data)};\n')
           "
 
       - name: Upload Pages artifact

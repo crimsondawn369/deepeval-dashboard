@@ -4,7 +4,7 @@ Local dev server for the eval dashboard.
 Serves the static dashboard files and exposes a small API that triggers real
 DeepEval runs against the Azure OpenAI-backed judge model defined in
 tests/evals/metrics.py, reusing tests/evals/run_patient_qa_eval.py directly
-(no duplicated eval logic). Results accumulate in dashboard/results.json,
+(no duplicated eval logic). Results accumulate as one JSON file per run in dashboard/results/,
 which is separate from that script's own tests/evals/*.csv output — running
 this server never touches or interferes with the standalone script.
 
@@ -28,7 +28,7 @@ from aiohttp import web
 
 HERE = Path(__file__).parent
 EVALS_DIR = HERE.parent / "tests" / "evals"
-RESULTS_JSON_PATH = HERE / "results.json"
+RESULTS_DIR = HERE / "results"
 
 QUICK_RUN_NUM_PATIENTS = 10
 CATEGORY = "CYAB study QA"
@@ -44,18 +44,8 @@ import run_patient_qa_eval as eval_mod  # noqa: E402
 STATE = {"running": False, "last_error": None}
 
 
-def empty_results():
-    return {"runs": [], "results": []}
-
-
-def load_results():
-    if not RESULTS_JSON_PATH.exists():
-        return empty_results()
-    return json.loads(RESULTS_JSON_PATH.read_text())
-
-
-def save_results(data):
-    RESULTS_JSON_PATH.write_text(json.dumps(data, indent=2))
+def run_id_to_filename(run_id):
+    return run_id.replace(":", "-") + ".json"
 
 
 def rows_to_variant(rows, pass_score=None):
@@ -82,31 +72,76 @@ def rows_to_variant(rows, pass_score=None):
     }
 
 
-def merge_run_into_results(data, run_id, run_label, timestamp, goldens_by_patient, rows):
-    data["runs"].append({"run_id": run_id, "label": run_label, "timestamp": timestamp})
-
+def save_run(run_id, run_label, timestamp, goldens_by_patient, rows):
+    """Writes one new file per run — no read-modify-write of prior history."""
     rows_by_patient = {}
     for row in rows:
         rows_by_patient.setdefault(row["patient_id"], []).append(row)
 
+    entries = []
     for patient_id, patient_rows in rows_by_patient.items():
         golden = goldens_by_patient[patient_id]
-        entry = next((r for r in data["results"] if r["test_id"] == patient_id), None)
-        if entry is None:
-            entry = {
+        entries.append(
+            {
                 "test_id": patient_id,
                 "category": golden.get("category", CATEGORY),
                 "adapter": ADAPTER,
                 "gold_question": golden["input"],
                 "expected_answer": golden["expected_output"],
-                "variants": {},
+                "expected_format": golden.get("expected_format"),
+                "pass_score": golden.get("pass_score"),
+                "variant": rows_to_variant(patient_rows, golden.get("pass_score")),
             }
-            data["results"].append(entry)
-        entry["category"] = golden.get("category", CATEGORY)
-        entry["pass_score"] = golden.get("pass_score")
-        entry["variants"][run_id] = rows_to_variant(patient_rows, golden.get("pass_score"))
+        )
 
-    return data
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    run_file = {"run_id": run_id, "label": run_label, "timestamp": timestamp, "entries": entries}
+    (RESULTS_DIR / run_id_to_filename(run_id)).write_text(json.dumps(run_file, indent=2))
+
+
+def load_all_results():
+    """Reads every per-run file in RESULTS_DIR and rebuilds the {runs, results}
+    aggregate shape the frontend expects, pivoting from run-centric storage to
+    test-case-centric variants keyed by run_id."""
+    if not RESULTS_DIR.exists():
+        return {"runs": [], "results": []}
+
+    run_files = []
+    for path in RESULTS_DIR.glob("*.json"):
+        run_files.append(json.loads(path.read_text()))
+    run_files.sort(key=lambda r: r["timestamp"])
+
+    runs = []
+    results_by_test_id = {}
+    for run_file in run_files:
+        runs.append(
+            {
+                "run_id": run_file["run_id"],
+                "label": run_file["label"],
+                "timestamp": run_file["timestamp"],
+            }
+        )
+        for entry in run_file["entries"]:
+            test_id = entry["test_id"]
+            result_entry = results_by_test_id.get(test_id)
+            if result_entry is None:
+                result_entry = {
+                    "test_id": test_id,
+                    "category": entry["category"],
+                    "adapter": entry["adapter"],
+                    "gold_question": entry["gold_question"],
+                    "expected_answer": entry["expected_answer"],
+                    "expected_format": entry["expected_format"],
+                    "variants": {},
+                }
+                results_by_test_id[test_id] = result_entry
+            result_entry["category"] = entry["category"]
+            result_entry["expected_format"] = entry["expected_format"]
+            result_entry["expected_answer"] = entry["expected_answer"]
+            result_entry["pass_score"] = entry["pass_score"]
+            result_entry["variants"][run_file["run_id"]] = entry["variant"]
+
+    return {"runs": runs, "results": list(results_by_test_id.values())}
 
 
 async def execute_real_run(custom_goldens=None):
@@ -145,9 +180,7 @@ async def execute_real_run(custom_goldens=None):
                     row["latency_ms"] = elapsed_ms
                 rows.extend(single_patient_rows)
 
-            data = load_results()
-            merge_run_into_results(data, run_id, run_label, timestamp, goldens_by_patient, rows)
-            save_results(data)
+            save_run(run_id, run_label, timestamp, goldens_by_patient, rows)
 
         # eval_mod.run_once makes real, blocking network calls (the judge
         # model's SDK client is synchronous) — run it off the event loop so
@@ -181,7 +214,7 @@ async def handle_status(request):
 
 
 async def handle_results(request):
-    return web.json_response(load_results())
+    return web.json_response(load_all_results())
 
 
 async def handle_index(request):
