@@ -1,6 +1,5 @@
 __pycache__/
 *.pyc
 .deepeval/
-results.json
 .env
 .env.local
