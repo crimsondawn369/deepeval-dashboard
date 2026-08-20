@@ -1,0 +1,34 @@
+streams:
+
+  - id: dbm
+    display_name: "DBM"
+    base_url: "https://aichat-api.{env}.magnolai.lilly.com"
+    chat_url: "https://www.{env}.magnolai.lilly.com/dbm"
+    stream_path: "/api/v1/aiquery/dbm_chat_stream"
+    session_path: "/api/v1/aiquery"
+    analysis_type: "STUDY_EXPLORER"
+
+  - id: de
+    display_name: "Data Engineering"
+    base_url: "https://aichat-api.{env}.magnolai.lilly.com"
+    chat_url: "https://www.{env}.magnolai.lilly.com/de"
+    stream_path: "/api/v1/aiquery/de_chat_stream"
+    session_path: "/api/v1/aiquery"
+    analysis_type: "DATA_ENGINEER"
+
+  - id: aiquery
+    display_name: "AI Query"
+    base_url: "https://aichat-api.{env}.magnolai.lilly.com"
+    chat_url: "https://www.{env}.magnolai.lilly.com/ai-query"
+    stream_path: "/api/v1/aiquery/aiquery_chat_stream"
+    session_path: "/api/v1/aiquery"
+    analysis_type: "AI_QUERY_DATA"
+
+  - id: cgm
+    display_name: "CGM"
+    base_url: "https://aichat-api.{env}.magnolai.lilly.com"
+    chat_url: "https://www.{env}.magnolai.lilly.com/cgm"
+    stream_path: "/api/v1/aiquery/cgm_chat_stream"
+    session_path: "/api/v1/aiquery"
+    analysis_type: "PLAN_EXECUTE"
+

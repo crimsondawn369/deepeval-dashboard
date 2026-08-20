@@ -155,6 +155,11 @@ button, select, input {
   gap: 16px;
 }
 
+.magnolai-controls {
+  flex-basis: 100%;
+  justify-content: flex-end;
+}
+
 .schedule-toggle {
   display: flex;
   flex-direction: column;
