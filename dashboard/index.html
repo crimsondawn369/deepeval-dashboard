@@ -48,7 +48,19 @@
           </div>
           <button class="btn-primary" id="run-now-btn">Run Now</button>
         </div>
+
+        <div class="run-controls magnolai-controls">
+          <label class="field">
+            <span class="field-label">Magnolai stream</span>
+            <select id="magnolai-stream-select" class="control"></select>
+          </label>
+          <button class="btn-primary" id="magnolai-connect-btn" type="button">Connect</button>
+          <span class="schedule-hint" id="magnolai-status-hint"></span>
+          <button class="btn-primary" id="magnolai-run-btn" type="button" disabled>Run via Magnolai</button>
+        </div>
       </div>
+
+      <p class="run-error" id="magnolai-error" hidden></p>
 
       <p class="run-error" id="run-error" hidden></p>
 

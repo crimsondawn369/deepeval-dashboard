@@ -65,7 +65,10 @@
     return {
       test_id: testCase.test_id,
       category: testCase.category,
-      adapter: testCase.adapter,
+      // adapter lives per-variant (per run) now, since the same test_id can be
+      // answered by different adapters across runs — testCase.adapter is a
+      // fallback for results.json written before this change.
+      adapter: variant.adapter || testCase.adapter,
       gold_question: testCase.gold_question,
       expected_answer: testCase.expected_answer,
       actual_answer: variant.actual_answer,
@@ -1734,6 +1737,179 @@
   }
 
   // ------------------------------------------------------------------
+  // Magnolai controls
+  // ------------------------------------------------------------------
+
+  let isMagnolaiConnecting = false;
+  let isMagnolaiRunTriggering = false;
+
+  function showMagnolaiError(message) {
+    const el = document.getElementById("magnolai-error");
+    if (!message) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = message;
+  }
+
+  function setMagnolaiStatusHint(text) {
+    document.getElementById("magnolai-status-hint").textContent = text || "";
+  }
+
+  function selectedMagnolaiStream() {
+    return document.getElementById("magnolai-stream-select").value;
+  }
+
+  async function populateMagnolaiStreams() {
+    const select = document.getElementById("magnolai-stream-select");
+    try {
+      const res = await fetch("/api/magnolai/streams");
+      if (!res.ok) throw new Error("bad response");
+      const data = await res.json();
+      console.log("[magnolai] GET /api/magnolai/streams ->", data);
+      select.innerHTML = (data.streams || [])
+        .map((s) => `<option value="${s.id}">${s.display_name}</option>`)
+        .join("");
+      const runBtn = document.getElementById("magnolai-run-btn");
+      const current = (data.streams || []).find((s) => s.id === select.value);
+      runBtn.disabled = !(current && current.connected);
+      setMagnolaiStatusHint(current && current.connected ? "Connected" : "");
+    } catch (err) {
+      console.error("[magnolai] failed to load streams", err);
+      select.innerHTML = "";
+      setMagnolaiStatusHint("Magnolai connector unavailable — is dashboard/server.py running?");
+    }
+  }
+
+  async function triggerMagnolaiConnect() {
+    if (isMagnolaiConnecting) return;
+    const streamId = selectedMagnolaiStream();
+    if (!streamId) return;
+
+    isMagnolaiConnecting = true;
+    showMagnolaiError(null);
+    const btn = document.getElementById("magnolai-connect-btn");
+    btn.disabled = true;
+    btn.textContent = "Connecting…";
+    setMagnolaiStatusHint("A browser window will open — complete Lilly SSO login there.");
+    console.log(`[magnolai] POST /api/magnolai/connect stream_id=${streamId}`);
+
+    try {
+      const res = await fetch("/api/magnolai/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stream_id: streamId }),
+      });
+      const body = await res.json();
+      console.log(`[magnolai] connect response (status ${res.status})`, body);
+      if (!res.ok) {
+        console.error("[magnolai] connect failed", body);
+        showMagnolaiError(body.error || "Failed to connect to Magnolai.");
+        setMagnolaiStatusHint("Not connected");
+      } else {
+        setMagnolaiStatusHint("Connected");
+        document.getElementById("magnolai-run-btn").disabled = false;
+      }
+    } catch (err) {
+      console.error("[magnolai] connect request threw", err);
+      showMagnolaiError("Could not reach dashboard/server.py. Start it and reload this page.");
+      setMagnolaiStatusHint("Not connected");
+    } finally {
+      isMagnolaiConnecting = false;
+      btn.disabled = false;
+      btn.textContent = "Connect";
+    }
+  }
+
+  function pollMagnolaiStatusUntilDone() {
+    return new Promise((resolve) => {
+      const interval = setInterval(async () => {
+        let status;
+        try {
+          const res = await fetch("/api/magnolai/status");
+          status = await res.json();
+        } catch (err) {
+          console.error("[magnolai] status poll threw", err);
+          clearInterval(interval);
+          resolve({ running: false, last_error: "Lost connection to dashboard/server.py." });
+          return;
+        }
+        if (!status.running) {
+          clearInterval(interval);
+          console.log("[magnolai] run finished", status);
+          resolve(status);
+        }
+      }, POLL_INTERVAL_MS);
+    });
+  }
+
+  async function triggerMagnolaiRun() {
+    if (isMagnolaiRunTriggering) return;
+    const streamId = selectedMagnolaiStream();
+    if (!streamId) return;
+
+    isMagnolaiRunTriggering = true;
+    showMagnolaiError(null);
+    const btn = document.getElementById("magnolai-run-btn");
+    btn.disabled = true;
+    btn.textContent = "Running…";
+
+    try {
+      const customGoldens = readCustomQuestions().map((q) => ({
+        patient_id: q.id,
+        input: q.question,
+        expected_output: q.expected_answer,
+        pass_score: q.pass_score,
+        category: q.category,
+      }));
+
+      console.log(
+        `[magnolai] POST /api/magnolai/run stream_id=${streamId} custom_goldens=${customGoldens.length}`
+      );
+      const res = await fetch("/api/magnolai/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stream_id: streamId, custom_goldens: customGoldens }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error("[magnolai] run failed to start", body);
+        showMagnolaiError(body.error || "Could not start a Magnolai run.");
+        return;
+      }
+
+      console.log("[magnolai] run started — polling /api/magnolai/status until done. Check the server terminal for per-question progress logs (set LOG_LEVEL=DEBUG for raw frame detail).");
+      const status = await pollMagnolaiStatusUntilDone();
+      if (status.last_error) {
+        console.error("[magnolai] run failed — full traceback:\n" + status.last_error);
+        showMagnolaiError(`Magnolai run failed: ${status.last_error.split("\n").pop()}`);
+      } else {
+        await refreshAfterRun();
+        console.log("[magnolai] results refreshed — check the results table for adapter=Magnolai rows.");
+      }
+    } catch (err) {
+      console.error("[magnolai] run request threw", err);
+      showMagnolaiError("Could not reach dashboard/server.py. Start it and reload this page.");
+    } finally {
+      isMagnolaiRunTriggering = false;
+      btn.disabled = false;
+      btn.textContent = "Run via Magnolai";
+    }
+  }
+
+  function initMagnolaiControls() {
+    document.getElementById("magnolai-connect-btn").addEventListener("click", triggerMagnolaiConnect);
+    document.getElementById("magnolai-run-btn").addEventListener("click", triggerMagnolaiRun);
+    document.getElementById("magnolai-stream-select").addEventListener("change", () => {
+      document.getElementById("magnolai-run-btn").disabled = true;
+      setMagnolaiStatusHint("");
+    });
+    populateMagnolaiStreams();
+  }
+
+  // ------------------------------------------------------------------
   // Boot
   // ------------------------------------------------------------------
 
@@ -1743,6 +1919,7 @@
     initTabs();
     initDrawer();
     initRunControls();
+    initMagnolaiControls();
     initTestTableRunSelect();
     initQuestionsTab();
 

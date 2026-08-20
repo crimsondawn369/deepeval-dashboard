@@ -1,0 +1,8 @@
+aiohttp
+azure-identity
+deepeval
+pytest
+httpx
+playwright
+pyyaml
+python-dotenv
