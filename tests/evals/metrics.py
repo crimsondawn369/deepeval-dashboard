@@ -15,14 +15,20 @@ from deepeval.models import AzureOpenAIModel
 from deepeval.test_case import LLMTestCaseParams
 
 
-_credential = ClientSecretCredential(
-    tenant_id=os.environ["AZURE_TENANT_ID"],
-    client_id=os.environ["AZURE_CLIENT_ID"],
-    client_secret=os.environ["AZURE_CLIENT_SECRET"],
-)
+_credential = None
 
 
 def _azure_ad_token_provider() -> str:
+    global _credential
+    if _credential is None:
+        # Built lazily (not at import time) so that starting the server, or
+        # running the Magnolai connect/run path — neither of which uses the
+        # judge model — never requires valid Azure AD credentials.
+        _credential = ClientSecretCredential(
+            tenant_id=os.environ["AZURE_TENANT_ID"],
+            client_id=os.environ["AZURE_CLIENT_ID"],
+            client_secret=os.environ["AZURE_CLIENT_SECRET"],
+        )
     return _credential.get_token(
         "https://cognitiveservices.azure.com/.default"
     ).token
