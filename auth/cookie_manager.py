@@ -13,6 +13,7 @@ import logging
 import time
 from typing import Optional
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
 logger = logging.getLogger(__name__)
@@ -202,7 +203,14 @@ class CookieManager:
                 while time.time() < deadline:
                     if captured_bearer["value"]:
                         break
-                    token = page.evaluate(_STORAGE_TOKEN_SCRIPT)
+                    try:
+                        token = page.evaluate(_STORAGE_TOKEN_SCRIPT)
+                    except PlaywrightError:
+                        # SSO redirects navigate the page multiple times;
+                        # if evaluate() lands mid-navigation, the JS context
+                        # it was targeting gets torn down underneath it.
+                        # Transient — just retry on the next poll.
+                        token = None
                     if token:
                         break
                     found = self._find_auth_cookie(context.cookies())
