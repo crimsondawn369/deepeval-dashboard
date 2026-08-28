@@ -12,11 +12,11 @@ Local dashboard and eval scripts for running and reviewing DeepEval-based patien
 
 ```
 pip install -r requirements.txt
-playwright install msedge
+playwright install webkit
 cp .env.example .env   # then fill in the real values
 ```
 
-`playwright install msedge` downloads the Microsoft Edge binary Playwright drives for the Magnolai SSO login step — only needed once per machine. No virtual environment is required; everything installs into your regular Python environment.
+`playwright install webkit` downloads the WebKit binary Playwright drives for the Magnolai SSO login step — only needed once per machine. (Chromium-based engines, including Edge, have been observed crashing mid-SSO-redirect on Lilly-managed Macs; WebKit doesn't hit this.) No virtual environment is required; everything installs into your regular Python environment.
 
 ## Running the dashboard
 

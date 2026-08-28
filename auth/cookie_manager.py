@@ -170,7 +170,14 @@ class CookieManager:
 
     def _extract_auth(self) -> None:
         with sync_playwright() as p:
-            browser = p.chromium.launch(channel="msedge", headless=False)
+            # Chromium-based engines (channel="msedge" or default chromium)
+            # have been observed crashing mid-SSO-redirect on Lilly-managed
+            # Macs (seen on two separate machines) — signatures include
+            # "Mach rendezvous failed, terminating process (parent died?)"
+            # and "Trying to load the allocator multiple times", consistent
+            # with endpoint security software interfering with automated
+            # Chromium processes. WebKit doesn't hit this.
+            browser = p.webkit.launch(headless=False)
             context = browser.new_context()
 
             captured_bearer: dict = {"value": None}
