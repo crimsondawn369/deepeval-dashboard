@@ -25,11 +25,17 @@ _PRIORITY_COOKIE_NAMES = {
     "__Secure-next-auth.session-token",
     "connect.sid",
     "jwt",
-    # ASP.NET Core cookie-auth (seen alongside the antiforgery cookie this
-    # Magnolai backend sets, which strongly suggests cookie, not JWT, auth)
-    ".AspNetCore.Cookies",
-    ".AspNetCore.Identity.Application",
 }
+
+# NOTE: .AspNetCore.Cookies / .AspNetCore.Identity.Application used to be
+# listed here on the theory that this backend uses cookie, not JWT, auth.
+# Confirmed via live testing that this is wrong: this cookie is scoped to
+# the SSO/identity domain, gets set within seconds of the redirect back
+# (long before the real Bearer token shows up in storage), and is rejected
+# with a 401 by the actual aichat-api backend every time it's used — which
+# then triggers connectors/magnolai_stream.py's own retry-on-401 logic and
+# forces a second full SSO login. Deliberately left out of priority so the
+# real Bearer token wins instead.
 
 # Cookies that are never valid API auth, even though they can be long and
 # JWT-shaped-looking. Matched case-insensitively as a substring, since ASP.NET
@@ -48,6 +54,14 @@ _EXCLUDED_COOKIE_SUBSTRINGS = (
     "_ga",
     "_gid",
 )
+
+# Cookies confirmed (via live testing) to always be rejected by aichat-api,
+# even though they look session-like. Never accepted as auth, regardless of
+# priority-name or JWT-shape matching below.
+_KNOWN_INVALID_COOKIE_NAMES = {
+    ".AspNetCore.Cookies",
+    ".AspNetCore.Identity.Application",
+}
 
 # Handles MSAL v2 (@azure/msal-browser), oidc-client-ts, angular-oauth2-oidc
 _STORAGE_TOKEN_SCRIPT = """
@@ -175,22 +189,32 @@ class CookieManager:
                 # Wait long enough for the SSO redirect chain to start
                 page.wait_for_timeout(5_000)
 
-                # Wait until fully back on Magnolai (post-SSO) — but skip if we never
-                # left (Windows SSO can complete silently within the first 5 s)
-                page.wait_for_function(
-                    """() => {
-                        const url = window.location.href;
-                        return url.includes('magnolai.lilly.com') &&
-                               !url.includes('login') &&
-                               !url.includes('signin') &&
-                               !url.includes('microsoftonline.com');
-                    }""",
-                    timeout=120_000,
-                )
-                page.wait_for_load_state("networkidle", timeout=30_000)
-
-                # Hold browser open so the user can inspect console/network tabs
-                page.wait_for_timeout(15_000)
+                # Poll for actual proof of login (token/cookie) instead of a
+                # fixed URL check — some streams render login in an
+                # iframe/popup that never changes the top-level URL, so a
+                # URL-based "is SSO done" check can't tell "still logging in"
+                # apart from "already done." A hard 120s cap also fails any
+                # real human login/MFA that legitimately takes longer than
+                # two minutes. Give a real human up to 5 minutes.
+                deadline = time.time() + 300
+                token = None
+                found = None
+                while time.time() < deadline:
+                    if captured_bearer["value"]:
+                        break
+                    token = page.evaluate(_STORAGE_TOKEN_SCRIPT)
+                    if token:
+                        break
+                    found = self._find_auth_cookie(context.cookies())
+                    if found:
+                        break
+                    page.wait_for_timeout(2_000)
+                else:
+                    names = [c["name"] for c in context.cookies()]
+                    raise RuntimeError(
+                        f"Timed out after 300s waiting for login at {self._chat_url}. "
+                        f"Cookies seen: {names}"
+                    )
 
                 # --- 1. Bearer from intercepted network request ---
                 if captured_bearer["value"]:
@@ -202,7 +226,6 @@ class CookieManager:
                     return
 
                 # --- 2. Bearer from browser storage (MSAL / oidc-client-ts / etc.) ---
-                token = page.evaluate(_STORAGE_TOKEN_SCRIPT)
                 if token:
                     self._auth_value = f"Bearer {token}"
                     self._extracted_at = time.time()
@@ -211,16 +234,7 @@ class CookieManager:
                     logger.info("[auth] Bearer captured from browser storage (first 20 chars: %s)", token[:20])
                     return
 
-                # Debug: show what IS in storage so we can tune the script
-                storage_dump = page.evaluate(_STORAGE_DUMP_SCRIPT)
-                logger.info("[auth] Storage dump (%d keys):", len(storage_dump))
-                for k, v in list(storage_dump.items())[:20]:
-                    logger.info("[auth]   %s: %s", k, v)
-
                 # --- 3. Cookie fallback ---
-                cookies = context.cookies()
-                logger.info("[auth] Trying cookie fallback — %d cookies found", len(cookies))
-                found = self._find_auth_cookie(cookies)
                 if found:
                     self._auth_value = f"{found['name']}={found['value']}"
                     self._extracted_at = time.time()
@@ -228,7 +242,7 @@ class CookieManager:
                     page.wait_for_timeout(3_000)
                     logger.info("[auth] Cookie captured: %s", found['name'])
                 else:
-                    names = [c["name"] for c in cookies]
+                    names = [c["name"] for c in context.cookies()]
                     raise RuntimeError(
                         f"No auth token or cookie found at {self._chat_url}. "
                         f"Cookies: {names}"
@@ -258,6 +272,7 @@ class CookieManager:
         candidates = [
             c for c in cookies
             if not any(bad in c["name"].lower() for bad in _EXCLUDED_COOKIE_SUBSTRINGS)
+            and c["name"] not in _KNOWN_INVALID_COOKIE_NAMES
         ]
         if not candidates:
             logger.warning(

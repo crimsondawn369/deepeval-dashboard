@@ -40,6 +40,7 @@ logging.basicConfig(
 )
 
 HERE = Path(__file__).parent
+REPO_ROOT = HERE.parent
 EVALS_DIR = HERE.parent / "tests" / "evals"
 RESULTS_DIR = HERE / "results"
 
@@ -97,7 +98,7 @@ def merge_run_into_results(data, run_id, run_label, timestamp, goldens_by_patien
     by different adapters (DeepEval's judge model, Magnolai) across different runs."""
     data["runs"].append({"run_id": run_id, "label": run_label, "timestamp": timestamp})
 
-def save_run(run_id, run_label, timestamp, goldens_by_patient, rows):
+def save_run(run_id, run_label, timestamp, goldens_by_patient, rows, adapter=ADAPTER):
     """Writes one new file per run — no read-modify-write of prior history."""
     rows_by_patient = {}
     for row in rows:
@@ -114,7 +115,7 @@ def save_run(run_id, run_label, timestamp, goldens_by_patient, rows):
                 "expected_answer": golden["expected_output"],
                 "expected_format": golden.get("expected_format"),
                 "pass_score": golden.get("pass_score"),
-                "variant": rows_to_variant(patient_rows, golden.get("pass_score")),
+                "variant": rows_to_variant(patient_rows, golden.get("pass_score"), adapter=adapter),
             }
         )
 
@@ -259,13 +260,8 @@ async def execute_magnolai_run(stream_id, custom_goldens=None):
                 empty_count, len(rows),
             )
 
-        data = load_results()
-        merge_run_into_results(
-            data, run_id, run_label, timestamp, goldens_by_patient, rows,
-            adapter=magnolai_bridge.ADAPTER_NAME,
-        )
-        save_results(data)
-        logger.info("[magnolai-run] wrote %d row(s) to %s", len(rows), RESULTS_JSON_PATH)
+        save_run(run_id, run_label, timestamp, goldens_by_patient, rows, adapter=magnolai_bridge.ADAPTER_NAME)
+        logger.info("[magnolai-run] wrote %d row(s) for run %s", len(rows), run_id)
     except Exception:
         MAGNOLAI_RUN_STATE["last_error"] = traceback.format_exc(limit=5)
         logger.exception("[magnolai-run] failed")
